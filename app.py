@@ -74,7 +74,6 @@ def detailedView():
     objectSelectBoxVal = st.sidebar.selectbox('Objects', objects, index=0)
     finalDf = specificCustomer.loc[specificCustomer['if'] == objectSelectBoxVal]
     finalDf = finalDf.filter(['if','IF_NUMBER','klantFK','naam','PART', 'NAME', 'CINEMATIC_PATH', 'DISPLACEMENT','DIRECTION', 'DATE_MEASUREMENT', 'MEASUREMENT_VALUE', 'DANGER_HIGH', 'ALARM_HIGH'])
-    finalDf['DIRECTION'] = finalDf['DIRECTION'].str[1:]
     displacement = finalDf.groupby(['DISPLACEMENT','NAME','PART'])
 
     if(objectSelectBoxVal != ''):
