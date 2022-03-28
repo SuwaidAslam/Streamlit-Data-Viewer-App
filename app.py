@@ -5,9 +5,9 @@ import streamlit_authenticator as stauth
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 from PIL import Image
+import hydralit_components as hc
 
-if 'logoImg' not in st.session_state:
-    st.session_state['logoImg'] = Image.open('if-logo.png')
+
 # change actual name for the users
 names = ['user-1', 'user-2', 'user-3', 'user-4', 'user-5', 'user-6', 'user-7', 
         'user-8', 'user-9', 'user-10']
@@ -23,43 +23,41 @@ passwords = ['password-1', 'password-2', 'password-3', 'password-4', 'password-5
 st.set_page_config(
     page_title="ZDL Data Viewer",
     initial_sidebar_state="expanded",
-    layout="wide"
+    layout='wide'
 )
 
-@st.cache(allow_output_mutation=True, suppress_st_warning=True)
+# Expire the cache every 2 hour.
+_CACHE_EXPIRY = 2 * 60 * 60
+@st.experimental_memo(ttl=_CACHE_EXPIRY, show_spinner=False)
 def getData():
-        if 'df' not in st.session_state:
-            df = pd.read_csv('my_csv250322_1.csv',sep=";")
-            df  = df.iloc[: , 2:]
-            df = df.dropna()
-            df = df.reset_index(drop=True)
-            df["MEASUREMENT_VALUE"] = df["MEASUREMENT_VALUE"].astype(str).str.split(".",2)
-            df["ALARM_HIGH"] = df["ALARM_HIGH"].astype(str).str.split(".", 2)
-            df["DANGER_HIGH"] = df["DANGER_HIGH"].astype(str).str.split(".", 2)
-            df['DIRECTION'] = df['DIRECTION'].str[1:]
-            for i in range(len(df)):
-                v1 = df.loc[i, "MEASUREMENT_VALUE"]
-                if(len(v1) > 2):
-                    df.loc[i, "MEASUREMENT_VALUE"] = float(v1[0] + "." + v1[1] + v1[2])
-                else:
-                    df.loc[i, "MEASUREMENT_VALUE"] = float(v1[0] + "." + v1[1])
-                v2 = df.loc[i, "ALARM_HIGH"]
-                if(len(v2) > 2):
-                    df.loc[i, "ALARM_HIGH"] = float(v2[0] + "." + v2[1] + v2[2])
-                else:
-                    df.loc[i, "ALARM_HIGH"] = float(v2[0] + "." + v2[1])
-                v3 = df.loc[i, "DANGER_HIGH"]
-                if(len(v3) > 2 ):
-                    df.loc[i, "DANGER_HIGH"] = float(v3[0] + "." + v3[1] + v3[2])
-                else:
-                    df.loc[i, "DANGER_HIGH"] = float(v3[0] + "." + v3[1])
-        
-            df[['MEASUREMENT_VALUE','ALARM_HIGH', 'DANGER_HIGH']] = df[['MEASUREMENT_VALUE','ALARM_HIGH', 
-                'DANGER_HIGH']].astype(float, errors = 'raise')
-            st.session_state['df'] = df
-            return st.session_state['df']
+    df = pd.read_csv('my_csv250322_1.csv',sep=";")
+    df  = df.iloc[: , 2:]
+    df = df.dropna()
+    df = df.reset_index(drop=True)
+    df["MEASUREMENT_VALUE"] = df["MEASUREMENT_VALUE"].astype(str).str.split(".",2)
+    df["ALARM_HIGH"] = df["ALARM_HIGH"].astype(str).str.split(".", 2)
+    df["DANGER_HIGH"] = df["DANGER_HIGH"].astype(str).str.split(".", 2)
+    df['DIRECTION'] = df['DIRECTION'].str[1:]
+    for i in range(len(df)):
+        v1 = df.loc[i, "MEASUREMENT_VALUE"]
+        if(len(v1) > 2):
+            df.loc[i, "MEASUREMENT_VALUE"] = float(v1[0] + "." + v1[1] + v1[2])
         else:
-            return st.session_state['df']
+            df.loc[i, "MEASUREMENT_VALUE"] = float(v1[0] + "." + v1[1])
+        v2 = df.loc[i, "ALARM_HIGH"]
+        if(len(v2) > 2):
+            df.loc[i, "ALARM_HIGH"] = float(v2[0] + "." + v2[1] + v2[2])
+        else:
+            df.loc[i, "ALARM_HIGH"] = float(v2[0] + "." + v2[1])
+        v3 = df.loc[i, "DANGER_HIGH"]
+        if(len(v3) > 2 ):
+            df.loc[i, "DANGER_HIGH"] = float(v3[0] + "." + v3[1] + v3[2])
+        else:
+            df.loc[i, "DANGER_HIGH"] = float(v3[0] + "." + v3[1])
+
+    df[['MEASUREMENT_VALUE','ALARM_HIGH', 'DANGER_HIGH']] = df[['MEASUREMENT_VALUE','ALARM_HIGH', 
+        'DANGER_HIGH']].astype(float, errors = 'raise')
+    return df
 
 # Detailed View Page Function
 def detailedView():
@@ -241,45 +239,51 @@ def detailedView():
                 st.plotly_chart(fig_ob)
                 st.dataframe(df)
 
+# compute data for overview page
+@st.experimental_memo(ttl=_CACHE_EXPIRY, show_spinner=False)
+def getCounts(df):
+    customersCount = df.naam.nunique()
+    objectsCount = df['if'].nunique()
+    measurementsCount = df.loc[df['DIRECTION'] == 'Ax']['DIRECTION'].count()
+    totalObjects = df['if'].unique()
+    # How many objects in green (Under Alarm High)
+    # Under the ALARM_HIGH level
+    greenObjects = 0
+    # Above the ALARM_HIGH level and below DANGER_HIGH level.
+    orangeObjects = 0
+    #above the DANGER_HIGH level.
+    redObjects = 0
+    satusDf = pd.DataFrame()
+    for object in totalObjects:
+        singleObjDf = df.loc[df['if'] == object]
+        maxMeasurmentValue = singleObjDf['MEASUREMENT_VALUE'].max()
+        if(maxMeasurmentValue < singleObjDf['ALARM_HIGH'].max()):
+            singleObjDf['Status'] = 'green'
+            satusDf = satusDf.append(singleObjDf)
+            greenObjects+=1
+        elif(maxMeasurmentValue >= singleObjDf['ALARM_HIGH'].max() and maxMeasurmentValue < singleObjDf['DANGER_HIGH'].max()):
+            singleObjDf['Status'] = 'orange'
+            satusDf = satusDf.append(singleObjDf)
+            orangeObjects+=1
+        elif(maxMeasurmentValue >= singleObjDf['DANGER_HIGH'].max()):
+            singleObjDf['Status'] = 'red'
+            satusDf = satusDf.append(singleObjDf)
+            redObjects+=1
+    data = [customersCount, objectsCount, measurementsCount, greenObjects, orangeObjects, redObjects, satusDf]
+    return data
  # Overview Page Function 
 def overview():
+    df = getData()
+    data = getCounts(df)
+    customersCount = data[0]
+    objectsCount = data[1]
+    measurementsCount = data[2]
+    greenObjects = data[3]
+    orangeObjects = data[4]
+    redObjects = data[5]
+    satusDf = data[6]
     st.header("Analytics Overview")
     cols = st.columns(3)
-
-    @st.cache
-    def getCounts():
-        df = getData()
-        customersCount = df.naam.nunique()
-        objectsCount = df['if'].nunique()
-        measurementsCount = df.loc[df['DIRECTION'] == 'Ax']['DIRECTION'].count()
-        totalObjects = df['if'].unique()
-        # How many objects in green (Under Alarm High)
-        # Under the ALARM_HIGH level
-        greenObjects = 0
-        # Above the ALARM_HIGH level and below DANGER_HIGH level.
-        orangeObjects = 0
-        #above the DANGER_HIGH level.
-        redObjects = 0
-        satusDf = pd.DataFrame()
-        for object in totalObjects:
-            singleObjDf = df.loc[df['if'] == object]
-            maxMeasurmentValue = singleObjDf['MEASUREMENT_VALUE'].max()
-            if(maxMeasurmentValue < singleObjDf['ALARM_HIGH'].max()):
-                singleObjDf['Status'] = 'green'
-                satusDf = satusDf.append(singleObjDf)
-                greenObjects+=1
-            elif(maxMeasurmentValue >= singleObjDf['ALARM_HIGH'].max() and maxMeasurmentValue < singleObjDf['DANGER_HIGH'].max()):
-                singleObjDf['Status'] = 'orange'
-                satusDf = satusDf.append(singleObjDf)
-                orangeObjects+=1
-            elif(maxMeasurmentValue >= singleObjDf['DANGER_HIGH'].max()):
-                singleObjDf['Status'] = 'red'
-                satusDf = satusDf.append(singleObjDf)
-                redObjects+=1
-        return customersCount, objectsCount, measurementsCount, greenObjects, orangeObjects, redObjects, satusDf
-        
-    customersCount, objectsCount, measurementsCount, greenObjects, orangeObjects, redObjects, satusDf = getCounts()
-    
     # How many customers
     customersCountFig = go.Figure()
     customersCountFig = go.Figure(go.Indicator(
@@ -373,17 +377,25 @@ def overview():
 def main():
     logPlaceholder = st.empty()
     titlePlaceholder = st.empty()
-    logPlaceholder.image(st.session_state['logoImg'], width=350)
+    @st.experimental_memo(show_spinner=False)
+    def loadLogin():
+        logoImg= Image.open('if-logo.png')
+        hashed_passwords = stauth.hasher(passwords).generate()
+        authenticator = stauth.authenticate(names,usernames,hashed_passwords,
+            'authenticator','auth',cookie_expiry_days=0)
+        return authenticator, logoImg
+    with hc.HyLoader("Loading...",hc.Loaders.standard_loaders,index=1):
+        df = getData()
+        getCounts(df)
+        authenticator, logoImg = loadLogin()
+    logPlaceholder.image(logoImg, width=350)
     original_title = '<p style="font-family:Monospace; color:Gray; font-size: 25px;">ZDL Data Viewer</p>'
     titlePlaceholder.markdown(original_title, unsafe_allow_html=True)
-    hashed_passwords = stauth.hasher(passwords).generate()
-    authenticator = stauth.authenticate(names,usernames,hashed_passwords,
-        'authenticator','auth',cookie_expiry_days=0)
     name, authentication_status = authenticator.login('Login','main')
     if authentication_status:
         logPlaceholder.empty()
         titlePlaceholder.empty()
-        st.sidebar.image(st.session_state['logoImg'] , width=215)
+        st.sidebar.image(logoImg , width=215)
         pageSelection = st.sidebar.selectbox("Select Page", ["Overview", "Detailed View"])
         if pageSelection == "Overview":
             overview()
