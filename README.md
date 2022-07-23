@@ -1,5 +1,5 @@
 # Streamlit Data Viewer Dashboard
-A dashboard to view the data in a graphical way in one place, make with streamlit Python.
+A dashboard to view the data in a graphical way in one place, developed with streamlit Python.
 
 [![forthebadge](https://forthebadge.com/images/badges/built-with-love.svg)](https://forthebadge.com)
 [![pythonbadge](https://forthebadge.com/images/badges/made-with-python.svg)](https://forthebadge.com)
